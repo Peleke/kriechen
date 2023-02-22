@@ -11,17 +11,20 @@ class Registry:
   class RegistryFullException(Exception):
     pass
 
-  def __init__(self, max: int=10):
+  def __init__(self, max: int=100):
     self.__registry = []
+    self.__overflow = []
     self.__max = max
   
-  def add(self, item: Any) -> Any:
+  def add(self, item: Any) -> bool:
     if self.length == self.max:
-      raise Registry.RegistryFullException()
-
-    logging.info(f"Registry Length: {len(self.__registry)}")
-    self.__registry.append(item)
-    return self.__registry[-1]
+      logging.info(f"Registry Overflowed.\n- Registry Length: {len(self.__registry)}\n- Overflow Length: {len(self.__overflow)}")
+      self.__overflow.append(item)
+      return False
+    else:
+      logging.info(f"Registry Length: {len(self.__registry)}")
+      self.__registry.append(item)
+      return True
 
   @property
   def full(self):
@@ -34,6 +37,14 @@ class Registry:
   @property
   def max(self):
     return self.__max
+
+  @property
+  def head(self):
+    return self.__registry[0]
+
+  @property
+  def tail(self):
+    return self.__registry[-1]
 
 
 
@@ -139,10 +150,29 @@ class Producer:
       await self.sink.put(self.transformer.fn_sink(result))
       logging.info(f"Placed processed input on sink.")
       self.source.task_done()
-      # Terminate if Done
-      if self.terminate(self, raw_element): # raw_element[0] == self.max_depth and self.source.empty():
+      # Terminate 
+      if self.registry.full or self.terminate(self, raw_element): # raw_element[0] == self.max_depth and self.source.empty():
+        logging.info(f"Producer #{self.id} draining queues...")
+        await self.__drain(all=True)
         logging.info(f"Terminating Producer #{self.id}")
         break
+
+  async def __drain(self, all: bool=False, sink: bool=False, source: bool=False):
+    queues = []
+    if all:
+      queues = [self.source, self.sink]
+    elif sink:
+      queues = [self.sink]
+    elif source:
+      queues = [self.source]
+    
+    while True:
+      for queue in queues:
+        try:
+          _ = await asyncio.wait_for(queue.get(), timeout=1)
+          queue.task_done()
+        except TimeoutError:
+          return
 
 class Consumer:
   """Consumer is responsible for accepting and processing arbitrary streams of data from a provided queue.
@@ -157,53 +187,74 @@ class Consumer:
     self.transformer = transformer
   
   async def pull(self):
+    draining = False
     while True:
       # Read from Source
       raw_element = await self.source.get()
+      logging.warning(f"Consumer #{self.id} got '{raw_element}' from source.")
       if not raw_element:
+        self.source.task_done()
         continue
-      await asyncio.sleep(0.3)
-      logging.warning(f"Got '{raw_element}' from source.")
-      # Process
-      logging.warning("Processing...")
-      result = self.transformer.fn(self.transformer.fn_raw(raw_element))
-      logging.warning("Input processed.")
-      # Put on Sink
-      logging.warning("Placing processed input on sink...")
-      await self.sink.put(self.transformer.fn_sink(result))
-      logging.warning("Placed processed input on sink.")
-
-      self.source.task_done()
-      if self.terminate(self, raw_element):
-        logging.warning(f"Terminating Consumer #{self.id}")
-        break
       else:
-        self.registry.add(raw_element)
+        _ = await self.__process(raw_element, draining=draining)
+        self.source.task_done()
+
+      if not self.registry.add(raw_element) or self.terminate(self, raw_element):
+        draining = True
+        logging.warning(f"Spinning down Consumer #{self.id}, now just draining...")
+
+        if self.source.empty():
+          logging.warning(f"Terminating Consumer #{self.id}.")
+          break
+      
+  async def tick(self):
+    while True:
+      await asyncio.sleep(1)
+      logging.info(f"Length of Consumer.source: {self.source.qsize()}")
+      logging.info(f"Length of Consumer.sink: {self.sink.qsize()}")
+
+  async def __process(self, raw_element: Any, draining: bool) -> Any:
+    # Process
+    logging.warning(f"Consumer #{self.id} processing raw input...")
+    result = self.transformer.fn(self.transformer.fn_raw(raw_element))
+    logging.warning(f"Consumer #{self.id} processed raw input.")
+
+    # Put on Sink
+    if not draining:
+      logging.warning(f"Consumer #{self.id} placing processed input on sink...")
+      await self.sink.put(self.transformer.fn_sink(result))
+      logging.warning(f"Consumer #{self.id} placed processed input on sink.")
+    else:
+      logging.warning(f"Consumer #{self.id} is draining, not putting additional items on queue...")
+
+    return result
 
 
 async def main():
-  crawler = Crawler()
+  crawler = Crawler(source_max=100, sink_max=100)
   # producer = Producer()
-  for i in range(10):
+  for i in range(90):
     logging.info(f"Seeding source with {i}...")
     if i == 9:
       crawler.seed_source((3, i))
     else:
       crawler.seed_source((0, i))
 
-  producers = [crawler.producer(id=i, fn=lambda tup: tup[-1], terminate=lambda self, _: self.registry.full) for i in range(2)]
-  consumers = [crawler.consumer(id=i, fn=lambda num: num, fn_sink= lambda num: (10, num), terminate=lambda self, _: self.registry.full) for i in range(2)]
+  producers = [crawler.producer(id=i, fn=lambda tup: tup[-1], terminate=lambda self, _: self.registry.full) for i in range(10)]
+  consumers = [crawler.consumer(id=i, fn=lambda num: num, fn_sink= lambda num: (10, num), terminate=lambda self, _: self.registry.full) for i in range(10)]
   logging.info(consumers[0])
   logging.info(producers[0])
 
+  asyncio.create_task(consumers[0].tick())
   ptasks = [asyncio.create_task(producer.pipe()) for producer in producers]
   ctasks = [asyncio.create_task(consumer.pull()) for consumer in consumers]
 
   await asyncio.gather(*ptasks)
   await crawler.sink.join()
 
-  # for c in consumers:
-  #   c.cancel()
+  for index, ctask in enumerate(ctasks):
+    logging.info(f"Canceling Consumer #{index}...")
+    ctask.cancel()
 
   # await asyncio.gather(
   #   crawler.produce(fn=lambda tup: tup[-1], terminate=lambda self, element: element[0] == self.max_depth and self.source.empty()),
