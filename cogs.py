@@ -51,7 +51,7 @@ class Registry:
 class Transformer:
   NOOP = lambda x: x
 
-  def __init__(self, fn_raw: Callable=Optional[None], fn: Optional[Callable]=None, fn_sink: Optional[Callable]=None):
+  def __init__(self, fn_raw: Optional[Callable]=None, fn: Optional[Callable]=None, fn_sink: Optional[Callable]=None):
     self.fn_raw = fn_raw if fn_raw else Transformer.NOOP
     self.fn = fn if fn else Transformer.NOOPE
     self.fn_sink = fn_sink if fn_sink else Transformer.NOOP
@@ -61,65 +61,112 @@ class Crawler:
   """Crawler is responsible for instantiating Producers and Consumers, and -- importantly -- managing their
   execution and termination."""
 
-  def __init__(self, source_max: int=10, sink_max: int=10, max_depth: int=3, max_units_to_process: int=100):
-    self.source = asyncio.Queue(source_max)
-    self.sink = asyncio.PriorityQueue(sink_max)
-    self.max_depth = max_depth
-    self.max_units_to_process = max_units_to_process
 
-    self.producers = dict() # Producer(source=self.source, sink=self.sink, max_depth=max_depth)
+  @classmethod
+  def create(cls, producer_transformer: Transformer, consumer_transformer: Transformer, producer_terminate: Callable=(lambda *_: False), consumer_terminate: Callable=(lambda *_: False), source_max: int=10, sink_max: int=10, producer_count: int=10, consumer_count: int=10, init: bool=True):
+    self = cls(source_max=source_max, sink_max=sink_max, producer_count=producer_count, consumer_count=consumer_count, producer_transformer=producer_transformer, consumer_transformer=consumer_transformer, producer_terminate=producer_terminate, consumer_terminate=consumer_terminate)
+
+    if init:
+      self.generate_producers()
+      self.generate_consumers()
+
+
+  def __init__(self, producer_transformer: Transformer, consumer_transformer: Transformer, producer_terminate: Callable, consumer_terminate: Callable, source_max: int=10, sink_max: int=10, producer_count: int=10, consumer_count: int=10):
+    self.consumer_transformer = consumer_transformer
+    self.consumer_terminate = consumer_terminate
+    self.consumer_count = consumer_count
+
+    self.producer_count = producer_count
+    self.producer_terminate = producer_terminate
+    self.producer_transformer = producer_transformer
+
+    self.source = asyncio.Queue(source_max)
+    self.sink = asyncio.Queue(sink_max)
+
+    self.producers = dict() # Producer(source=self.source, sink=self.sink)
     self.consumers = dict() # Consumer(source=self.sink, sink=self.source)
     self.registry = Registry()
 
-  def producer(self, id: int, fn_raw: Optional[Callable]=None, fn: Optional[Callable]=None, fn_sink: Optional[Callable]=None, terminate: Callable=(lambda x: False)):
+  async def crawl(self):
+    # Generate producers/consumers
+    producers = await self.generate_producers()
+    consumers = await self.generate_consumers()
+
+    # Create/Schedule tasks
+    for producer_data in producers.values():
+      producer_data["task"] = asyncio.create_task(producer_data["producer"].pipe())
+
+    for consumer_data in consumers.values():
+      consumer_data["task"] = asyncio.create_task(consumer_data["consumer"].pull())
+
+    # Gather `producers`` + Join Consumer Input Queue
+    await asyncio.gather(*self.producer_tasks)
+    await self.sink.join()
+
+    # Cancel Hanging Consumers
+    for index, ctask in enumerate(self.consumer_tasks):
+      logging.info(f"Canceling Consumer #{index}...")
+      ctask.cancel()
+
+  def producer(self, id: int, transformer: Transformer, terminate: Callable=(lambda *_: False)):
     producer = Producer(
       id=id,
-      transformer=Transformer(
-        fn_raw=fn_raw,
-        fn=fn,
-        fn_sink=fn_sink,
-      ),
+      transformer=transformer,
       registry=self.registry,
       source=self.source,
       sink=self.sink,
       terminate=terminate,
     )
 
-    index = len(self.producers)
-    self.producers[index] = {
-      "producer": producer
+    self.producers[producer.id] = {
+      "producer": producer,
+      "task": None,
     }
 
-    # task = asyncio.create_task(producer.pipe(fn_raw=fn_raw, fn=fn, fn_sink=fn_sink))
-    # self.producers[index]["task"] = task
-
-    # return task
     return producer
 
-  def consumer(self, id: int, fn_raw: Callable=(lambda x: x), fn: Callable=(lambda x: x), fn_sink: Callable=(lambda x: x), terminate: Callable=(lambda x: False)):
+  async def generate_producers(self):
+    while len(self.producers) < self.producer_count:
+      self.producer(
+        id=len(self.producers),
+        transformer=self.producer_transformer,
+        terminate=self.producer_terminate,
+      )
+    return self.producers
+
+  @property
+  def producer_tasks(self):
+    return [p["task"] for p in self.producers.values()]
+
+  def consumer(self, id: int, transformer: Transformer, terminate: Callable=(lambda *_: False)):
     consumer = Consumer(
       id=id,
       registry=self.registry,
       source=self.sink,
       sink=self.source,
       terminate=terminate,
-      transformer=Transformer(
-        fn_raw=fn_raw,
-        fn=fn,
-        fn_sink=fn_sink,
-      ),
+      transformer=transformer,
     )
 
-    index = len(self.consumers)
-    self.consumers[index] = {
-      "consumer": consumer
+    self.consumers[consumer.id] = {
+      "consumer": consumer,
+      "task": None,
     }
 
-    # task = asyncio.create_task(consumer.pull(fn_raw=fn_raw, fn=fn, fn_sink=fn_sink))
-    # self.consumers[index]["task"] = task
-
-    # return task
     return consumer
+
+  async def generate_consumers(self):
+    while len(self.consumers) < self.consumer_count:
+      self.consumer(
+        id=len(self.consumers),
+        transformer=self.consumer_transformer,
+        terminate=self.consumer_terminate,
+      )
+    return self.consumers
+
+  @property
+  def consumer_tasks(self):
+    return [c["task"] for c in self.consumers.values()]
 
   def seed_source(self, input_: Tuple[int, Any]):
     self.source.put_nowait(input_)
@@ -128,7 +175,7 @@ class Producer:
   """Producer is responsible for generating arbitrary streams of data and placing it onto a provided queue.
   Producer is designed to execute indefinitely until terminated by a parent Crawler."""
 
-  def __init__(self, id: int, source: asyncio.PriorityQueue, sink: asyncio.Queue, transformer: Transformer, registry: Registry, terminate: Callable=(lambda x: False)):
+  def __init__(self, id: int, source: asyncio.Queue, sink: asyncio.Queue, transformer: Transformer, registry: Registry, terminate: Callable=(lambda *_: False)):
     self.id = id
     self.registry = registry
     self.source = source
@@ -143,6 +190,7 @@ class Producer:
       logging.info(f"Got '{raw_element}' from source.")
       # Process
       logging.info(f"Processing...")
+      logging.error(self.transformer.fn)
       result = self.transformer.fn(self.transformer.fn_raw(raw_element))
       logging.info(f"Input processed.")
       # Put on Sink
@@ -178,7 +226,7 @@ class Consumer:
   """Consumer is responsible for accepting and processing arbitrary streams of data from a provided queue.
   Consumer is designed to execute indefinitely until terminated by a parent Crawler."""
 
-  def __init__(self, source: asyncio.Queue, sink: asyncio.PriorityQueue, registry: Registry, transformer: Transformer, terminate: Callable, id: int):
+  def __init__(self, source: asyncio.Queue, sink: asyncio.Queue, registry: Registry, transformer: Transformer, terminate: Callable, id: int):
     self.id = id
     self.registry = registry
     self.source = source
@@ -231,8 +279,20 @@ class Consumer:
 
 
 async def main():
-  crawler = Crawler(source_max=100, sink_max=100)
-  # producer = Producer()
+  crawler = Crawler(
+    consumer_transformer=Transformer(
+      fn=lambda num: num,
+      fn_sink=lambda num: (10, num),
+    ),
+    consumer_terminate=(lambda self, _: self.registry.full),
+    producer_transformer=Transformer(
+      fn=lambda tup: tup[-1],
+    ),
+    producer_terminate=(lambda self, _: self.registry.full),
+    source_max=100,
+    sink_max=100,
+  )
+
   for i in range(90):
     logging.info(f"Seeding source with {i}...")
     if i == 9:
@@ -240,48 +300,7 @@ async def main():
     else:
       crawler.seed_source((0, i))
 
-  producers = [crawler.producer(id=i, fn=lambda tup: tup[-1], terminate=lambda self, _: self.registry.full) for i in range(10)]
-  consumers = [crawler.consumer(id=i, fn=lambda num: num, fn_sink= lambda num: (10, num), terminate=lambda self, _: self.registry.full) for i in range(10)]
-  logging.info(consumers[0])
-  logging.info(producers[0])
-
-  asyncio.create_task(consumers[0].tick())
-  ptasks = [asyncio.create_task(producer.pipe()) for producer in producers]
-  ctasks = [asyncio.create_task(consumer.pull()) for consumer in consumers]
-
-  await asyncio.gather(*ptasks)
-  await crawler.sink.join()
-
-  for index, ctask in enumerate(ctasks):
-    logging.info(f"Canceling Consumer #{index}...")
-    ctask.cancel()
-
-  # await asyncio.gather(
-  #   crawler.produce(fn=lambda tup: tup[-1], terminate=lambda self, element: element[0] == self.max_depth and self.source.empty()),
-  #   crawler.consume(fn=lambda num: num, fn_sink= lambda num: (3, num))
-  # )
-  # consumer_task = asyncio.create_task(crawler.consume(fn=lambda num: num, fn_sink= lambda num: (3, num)))
-  # producer_task = crawler.produce(fn=lambda tup: tup[-1], terminate=lambda self, element: element[0] == self.max_depth and self.source.empty())
-
-  # print(producer_task)
-  # print(consumer_task)
-
-  # await asyncio.gather(producer_task, consumer_task)
-  # await crawler.source.join()
-
-  # await asyncio.gather(producer_task)
-  # await crawler.sink.join()
-  # await crawler.produce(fn=lambda tup: tup[-1])
-  # await crawler.consume(fn=lambda num: num)
-  # await asyncio.gather(crawler.source.join(), crawler.sink.join())
-
-
-  # t1 = asyncio.create_task(Producer.pipe(fn=(lambda tup: tup[1])))
-  # await t1
-
+  await crawler.crawl()
 
 if __name__ == '__main__':
   asyncio.run(main())
-
-  # crawler = Crawler(base_url=...)
-  # crawler.crawl(max_depth=3)
