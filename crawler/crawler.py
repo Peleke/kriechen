@@ -3,31 +3,14 @@ termination."""
 from typing import Any, Callable, List, Tuple
 import asyncio
 import logging
-import sys
-
-import uvloop
 
 from consumer import Consumer
 from events import CrawlerEvents
 from event_bus import EventBus
+from listeners import Listeners
 from producer import Producer
 from registry import Registry
 from transformer import Transformer
-
-
-class Listeners:
-
-  def __init__(self, event_bus: EventBus, listeners: List[Tuple[str, Callable]]):
-    self.event_bus = event_bus
-    self.listeners = {k:v for k, v in listeners}
-
-    for event_name, callback in self.listeners.items():
-      setattr(self, str(event_name), callback)
-      self.event_bus.add_listener(event_name, callback)
-
-  @property
-  def listener_names(self):
-    return list(self.listeners.keys())
 
 
 class Crawler:
@@ -57,7 +40,7 @@ class Crawler:
     self.registry = Registry(event_bus=self.event_bus)
     self.__shutting_down = False
 
-    self.destructor = Destructor(
+    self.destructor = self.Destructor(
       crawler=self,
       event_bus=self.event_bus,
       terminate=self.terminate,
@@ -71,6 +54,12 @@ class Crawler:
         (CrawlerEvents.Crawler.TERMINATE, self.destructor.shutdown),
       ]
     )
+
+  #############
+  # THROWAWAY #
+  #############
+  def seed_source(self, input_: Tuple[int, Any]):
+    self.source.put_nowait(input_)
 
   ##########################
   # METADATA & BOOKKEEPING #
@@ -184,88 +173,46 @@ class Crawler:
 
     return consumer
 
-  #############
-  # THROWAWAY #
-  #############
-  def seed_source(self, input_: Tuple[int, Any]):
-    self.source.put_nowait(input_)
 
-class Destructor:
+  ###################
+  # TIGHTLY COUPLED #
+  ###################
+  class Destructor:
 
-  def __init__(self, crawler: Crawler, event_bus: EventBus, terminate: Callable, drain_timeout: int=1):
-    self.crawler = crawler
-    self.drain_timeout = drain_timeout
-    self.event_bus = event_bus
-    self.terminate = terminate
+    def __init__(self, crawler: 'Crawler', event_bus: EventBus, terminate: Callable, drain_timeout: int=1):
+      self.crawler = crawler
+      self.drain_timeout = drain_timeout
+      self.event_bus = event_bus
+      self.terminate = terminate
 
-  async def shutdown(self, _: Any) -> None:
-    self.__terminate_workers()
-    drain_tasks = [asyncio.create_task(self.__drain(q)) for q in ["sink", "source"]]
-    self.crawler.shut_down()
-    await asyncio.gather(*drain_tasks)
+    async def shutdown(self, _: Any) -> None:
+      self.terminate_workers()
+      drain_tasks = [asyncio.create_task(self.drain(q)) for q in ["sink", "source"]]
+      self.crawler.shut_down()
+      await asyncio.gather(*drain_tasks)
 
-  async def watch(self, event: Any) -> None:
-    if self.terminate(self.crawler, event):
-      self.event_bus.emit(CrawlerEvents.Crawler.TERMINATE)
+    async def watch(self, event: Any) -> None:
+      if self.terminate(self.crawler, event):
+        self.event_bus.emit(CrawlerEvents.Crawler.TERMINATE)
 
-  async def __drain(self, queue_name: str) -> None:
-    queue = getattr(self.crawler, queue_name)
-    while True:
-        try:
-          _ = await asyncio.wait_for(queue.get(), timeout=self.drain_timeout)
-          queue.task_done()
-        except TimeoutError:
-          break
+    async def drain(self, queue_name: str) -> None:
+      queue = getattr(self.crawler, queue_name)
+      while True:
+          try:
+            _ = await asyncio.wait_for(queue.get(), timeout=self.drain_timeout)
+            queue.task_done()
+          except TimeoutError:
+            break
 
-  def __terminate_workers(self, producers: bool=True, consumers: bool=True):
-    if self.crawler.shutting_down:
-      return
-    else:
-      if producers:
-        for producer_id, producer_data in self.crawler.producers.items():
-          logging.warning(f"Cancelling Producer #{producer_id}...")
-          producer_data["task"].cancel()
-      if consumers:
-        for consumer_id, consumer_data in self.crawler.consumers.items():
-          logging.warning(f"Cancelling Consumer #{consumer_id}...")
-          consumer_data["task"].cancel()
-
-
-async def main():
-  crawler = Crawler(
-    consumer_transformer=Transformer(
-      fn=lambda num: num,
-      fn_sink=lambda num: (10, num),
-    ),
-    producer_transformer=Transformer(
-      fn=lambda tup: tup[-1],
-    ),
-    terminate=((lambda self, _: self.done)),
-    source_max=10,
-    sink_max=10,
-  )
-
-  for i in range(10):
-    logging.info(f"Seeding source with {i}...")
-    if i == 9:
-      crawler.seed_source((3, i))
-    else:
-      crawler.seed_source((0, i))
-
-  await crawler.crawl()
-
-
-if __name__ == '__main__':
-  logging.getLogger().setLevel(logging.INFO)
-  if sys.version_info >= (3, 11):
-    with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
-      try:
-        runner.run(main())
-      except asyncio.exceptions.CancelledError:
-        pass
-  else:
-    uvloop.install()
-    try:
-      asyncio.run(main())
-    except asyncio.exceptions.CancelledError:
-      pass
+    def terminate_workers(self, producers: bool=True, consumers: bool=True):
+      if self.crawler.shutting_down:
+        return
+      else:
+        if producers:
+          for producer_id, producer_data in self.crawler.producers.items():
+            logging.warning(f"Cancelling Producer #{producer_id}...")
+            producer_data["task"].cancel()
+        if consumers:
+          for consumer_id, consumer_data in self.crawler.consumers.items():
+            logging.warning(f"Cancelling Consumer #{consumer_id}...")
+            consumer_data["task"].cancel()
