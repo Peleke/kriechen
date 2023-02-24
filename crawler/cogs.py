@@ -3,6 +3,9 @@ termination."""
 from typing import Any, Callable, List, Tuple
 import asyncio
 import logging
+import sys
+
+import uvloop
 
 from consumer import Consumer
 from events import CrawlerEvents
@@ -189,8 +192,9 @@ class Crawler:
 
 class Destructor:
 
-  def __init__(self, crawler: Crawler, event_bus: EventBus, terminate: Callable):
+  def __init__(self, crawler: Crawler, event_bus: EventBus, terminate: Callable, drain_timeout: int=1):
     self.crawler = crawler
+    self.drain_timeout = drain_timeout
     self.event_bus = event_bus
     self.terminate = terminate
 
@@ -208,7 +212,7 @@ class Destructor:
     queue = getattr(self.crawler, queue_name)
     while True:
         try:
-          _ = await asyncio.wait_for(queue.get(), timeout=1)
+          _ = await asyncio.wait_for(queue.get(), timeout=self.drain_timeout)
           queue.task_done()
         except TimeoutError:
           break
@@ -250,7 +254,18 @@ async def main():
 
   await crawler.crawl()
 
+
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
-
-  asyncio.run(main())
+  if sys.version_info >= (3, 11):
+    with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
+      try:
+        runner.run(main())
+      except asyncio.exceptions.CancelledError:
+        pass
+  else:
+    uvloop.install()
+    try:
+      asyncio.run(main())
+    except asyncio.exceptions.CancelledError:
+      pass
