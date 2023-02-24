@@ -52,7 +52,7 @@ class Crawler:
     ):
         self.consumer_transformer = consumer_transformer
         self.consumer_count = consumer_count
-        self.consumers: Dict[str, Dict[str, Any]]= dict()
+        self.consumers: Dict[str, Dict[str, Any]] = dict()
 
         self.producer_count = producer_count
         self.producer_transformer = producer_transformer
@@ -217,9 +217,7 @@ class Crawler:
 
         async def shutdown(self, _: Any) -> None:
             self.terminate_workers()
-            drain_tasks = [
-                asyncio.create_task(self.drain(q)) for q in ["sink", "source"]
-            ]
+            drain_tasks = [asyncio.create_task(self.drain(q)) for q in ["sink", "source"]]
             self.crawler.shut_down()
             await asyncio.gather(*drain_tasks)
 

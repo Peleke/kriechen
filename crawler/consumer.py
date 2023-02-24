@@ -40,17 +40,11 @@ class Consumer:
 
                     # Put on Sink
                     if not draining:
-                        logging.info(
-                            f"Consumer #{self.id} placing processed input on sink..."
-                        )
+                        logging.info(f"Consumer #{self.id} placing processed input on sink...")
                         await self.sink.put(self.transformer.fn_sink(result))
-                        logging.info(
-                            f"Consumer #{self.id} placed processed input on sink."
-                        )
+                        logging.info(f"Consumer #{self.id} placed processed input on sink.")
                     else:
-                        logging.info(
-                            f"Consumer #{self.id} is draining, not putting additional items on queue..."
-                        )
+                        logging.info(f"Consumer #{self.id} is draining, not putting additional items on queue...")
 
                 self.source.task_done()
                 self.event_bus.emit(

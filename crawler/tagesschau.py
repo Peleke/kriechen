@@ -18,9 +18,7 @@ class Content:
                 if response.status == 200:
                     return await response.text()
                 else:
-                    logging.error(
-                        f"Response failed with status code: '{response.status}'"
-                    )
+                    logging.error(f"Response failed with status code: '{response.status}'")
 
     async def get_article_links(self, refresh: bool = False) -> List[str]:
         if not self.article_links or refresh:
@@ -28,11 +26,7 @@ class Content:
             if response := await self.get_text(self.url):
                 anchors = bs(response, features="html.parser").find_all("a")
                 links = [a.get("href") for a in anchors if "https"]
-                self.article_links = [
-                    l
-                    for l in links
-                    if l is not None and TagesSchau.HOME in l and l.endswith("html")
-                ]
+                self.article_links = [l for l in links if l is not None and TagesSchau.HOME in l and l.endswith("html")]
         return self.article_links
 
 
@@ -50,9 +44,7 @@ class Article(Content):
                     self.text = self.get_paragraphs()
                     self.article_links = await self.get_article_links()
                 else:
-                    e = aiohttp.ClientEerror(
-                        f"Received non-20x Response: {response.status}"
-                    )
+                    e = aiohttp.ClientEerror(f"Received non-20x Response: {response.status}")
                     logging.error(exc_info=e)
                     raise e
 
@@ -73,9 +65,7 @@ class TagesSchau(Content):
     HOME = "https://www.tagesschau.de"
 
     @classmethod
-    async def create(
-        cls, with_article_links: bool = False, with_categories: bool = True
-    ):
+    async def create(cls, with_article_links: bool = False, with_categories: bool = True):
         logging.info("Initializing...")
         self = cls(url=TagesSchau.HOME)
 
@@ -101,9 +91,7 @@ class TagesSchau(Content):
                 for l in (await self.get_article_links(refresh=False))
                 if l.startswith("https") and "tagesschau.de" in l
             ]
-            category_rows = [
-                l.split("/")[3:] for l in relevant if len(l.split("/")[3:]) > 2
-            ]
+            category_rows = [l.split("/")[3:] for l in relevant if len(l.split("/")[3:]) > 2]
 
             category_map = {}
             for row in category_rows:
@@ -136,9 +124,7 @@ class TagesSchau(Content):
             try:
                 if url not in urls:
                     urls.add(url)
-                    article = await self.__process_article_links(
-                        url=url, article_link_queue=article_link_queue, id=id
-                    )
+                    article = await self.__process_article_links(url=url, article_link_queue=article_link_queue, id=id)
 
                 if depth < max_depth:
                     logging.info("Adding new links to queue...")
@@ -158,14 +144,10 @@ class TagesSchau(Content):
 
             logging.info(f"Article received: {article}")
 
-    async def add_to_queue(
-        self, article_link_queue: asyncio.Queue, article_links: List[str], depth: int
-    ):
+    async def add_to_queue(self, article_link_queue: asyncio.Queue, article_links: List[str], depth: int):
         [await article_link_queue.put((l, depth + 1)) for l in article_links]
 
-    async def __process_article_links(
-        self, url: str, article_link_queue: asyncio.Queue, id: int
-    ) -> None:
+    async def __process_article_links(self, url: str, article_link_queue: asyncio.Queue, id: int) -> None:
         logging.info(f"Fetcher #{id} getting '{url}'...")
 
         article = await Article.create(url=url)
@@ -195,11 +177,7 @@ async def main():
 
     articles = []
     pending = [
-        asyncio.create_task(
-            ts.articles_worker(
-                article_link_queue=queue, articles=articles, id=i, urls=set()
-            )
-        )
+        asyncio.create_task(ts.articles_worker(article_link_queue=queue, articles=articles, id=i, urls=set()))
         for i in range(10)
     ]
     try:
