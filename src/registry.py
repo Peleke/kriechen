@@ -1,5 +1,5 @@
 """The Registry class is used to keep track of the entities processed by the Crawler's producers and consumers."""
-from typing import Any
+from typing import Any, List
 import logging
 
 from events import CrawlerEvents
@@ -11,8 +11,8 @@ class Registry:
         pass
 
     def __init__(self, event_bus: EventBus, max: int = 100):
-        self.__registry = []
-        self.__overflow = []
+        self.__registry: List[Any] = []
+        self.__overflow: List[Any] = []
         self.__max = max
         self.__event_bus = event_bus
 
@@ -20,7 +20,8 @@ class Registry:
         to_return = False
         if self.length == self.max:
             logging.info(
-                f"Registry Overflowed.\n- Registry Length: {len(self.__registry)}\n- Overflow Length: {len(self.__overflow)}"
+                f"Registry Overflowed.\n- Registry Length: {len(self.__registry)}\n"
+                + f"- Overflow Length: {len(self.__overflow)}"
             )
             self.__overflow.append(item)
             to_return = False

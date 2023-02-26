@@ -3,14 +3,14 @@ import enum
 
 
 class CrawlerEvents:
-    class Consumer(enum.Enum):
+    class Consumer(str, enum.Enum):
         PROCESSED_ITEM = "CONSUMER_PROCESSED_ITEM"
 
-    class Producer(enum.Enum):
+    class Producer(str, enum.Enum):
         PROCESSED_ITEM = "PRODUCER_PROCESSED_ITEM"
 
-    class Registry(enum.Enum):
+    class Registry(str, enum.Enum):
         UPDATED = "REGISTRY_UPDATED"
 
-    class Crawler(enum.Enum):
+    class Crawler(str, enum.Enum):
         TERMINATE = "TERMINATE_CRAWLER"

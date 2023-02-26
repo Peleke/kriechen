@@ -1,12 +1,10 @@
 """The Consumer class is responsible for accepting and processing arbitrary streams of data from a provided queue.
 Consumer is designed to execute indefinitely until terminated by a parent Crawler."""
 import logging
-from typing import Any, Callable
 import asyncio
 
 from events import CrawlerEvents
 from event_bus import EventBus
-from registry import Registry
 from transformer import Transformer
 
 

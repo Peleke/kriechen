@@ -1,0 +1,11 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+-   repo: local
+    hooks:
+    -   id: tox
+        name: stylecheck
+        entry: bash -c 'tox -e format . -e lint -e typecheck'
+        language: system
+        types: [python]
+        pass_filenames: false

@@ -1,10 +1,10 @@
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, Callable, Dict, Optional, Set
 import asyncio
 
 
 class EventBus:
     def __init__(self):
-        self.listeners: Dict[str, List[Callable]] = {}
+        self.listeners: Dict[str, Set[Callable[..., Any]]] = {}
 
     def add_listener(self, event_name: str, listener: Callable):
         if not self.listeners.get(event_name, None):
@@ -18,6 +18,6 @@ class EventBus:
             del self.listeners[event_name]
 
     def emit(self, event_name: str, event: Optional[Any] = None):
-        listeners = self.listeners.get(event_name, [])
+        listeners: Set[Callable[..., Any]] = self.listeners.get(event_name, set())
         for listener in listeners:
             asyncio.create_task(listener(event))

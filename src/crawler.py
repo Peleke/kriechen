@@ -52,14 +52,14 @@ class Crawler:
     ):
         self.consumer_transformer = consumer_transformer
         self.consumer_count = consumer_count
-        self.consumers: Dict[str, Dict[str, Any]] = dict()
+        self.consumers: Dict[int, Dict[str, Any]] = dict()
 
         self.producer_count = producer_count
         self.producer_transformer = producer_transformer
-        self.producers: Dict[str, Dict[str, Any]] = dict()
+        self.producers: Dict[int, Dict[str, Any]] = dict()
 
-        self.source = asyncio.Queue(source_max)
-        self.sink = asyncio.Queue(sink_max)
+        self.source: asyncio.Queue = asyncio.Queue(source_max)
+        self.sink: asyncio.Queue = asyncio.Queue(sink_max)
         self.terminate = terminate
 
         self.event_bus = EventBus()
