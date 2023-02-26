@@ -2,8 +2,8 @@
 from typing import Any, List
 import logging
 
-from events import CrawlerEvents
-from event_bus import EventBus
+from .events import CrawlerEvents
+from .event_bus import EventBus
 
 
 class Registry:

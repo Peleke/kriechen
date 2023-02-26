@@ -4,13 +4,13 @@ from typing import Any, Callable, Dict, Tuple
 import asyncio
 import logging
 
-from consumer import Consumer
-from events import CrawlerEvents
-from event_bus import EventBus
-from listeners import Listeners
-from producer import Producer
-from registry import Registry
-from transformer import Transformer
+from .consumer import Consumer
+from .events import CrawlerEvents
+from .event_bus import EventBus
+from .listeners import Listeners
+from .producer import Producer
+from .registry import Registry
+from .transformer import Transformer
 
 
 class Crawler:

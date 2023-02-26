@@ -5,8 +5,8 @@ import sys
 
 import uvloop
 
-from crawler import Crawler
-from transformer import Transformer
+from .crawler import Crawler
+from .transformer import Transformer
 
 
 async def main():

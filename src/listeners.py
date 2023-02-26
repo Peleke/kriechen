@@ -2,7 +2,7 @@
 entities pub/sub implementation."""
 from typing import Callable, List, Tuple
 
-from event_bus import EventBus
+from .event_bus import EventBus
 
 
 class Listeners:

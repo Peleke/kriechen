@@ -3,9 +3,9 @@ designed to execute indefinitely until terminated by a parent Crawler."""
 import logging
 import asyncio
 
-from events import CrawlerEvents
-from event_bus import EventBus
-from transformer import Transformer
+from .events import CrawlerEvents
+from .event_bus import EventBus
+from .transformer import Transformer
 
 
 class Producer:

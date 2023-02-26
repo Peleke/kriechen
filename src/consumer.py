@@ -3,9 +3,9 @@ Consumer is designed to execute indefinitely until terminated by a parent Crawle
 import logging
 import asyncio
 
-from events import CrawlerEvents
-from event_bus import EventBus
-from transformer import Transformer
+from .events import CrawlerEvents
+from .event_bus import EventBus
+from .transformer import Transformer
 
 
 class Consumer:
