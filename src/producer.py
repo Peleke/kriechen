@@ -17,6 +17,28 @@ class Producer:
         transformer: Transformer,
         event_bus: EventBus,
     ):
+        """Constructor method
+
+        Creates a new Producer instance.
+
+        :param id: Integer representing the ID of this consumer. Used for logging and termination logic.
+        :type id: int
+
+        :param source: asyncio.Queue instance from which to read data to consume.
+        :type source: asyncio.Queue
+
+        :param sink: asyncio.Queue instance to which to feed forward transformations of consumed data, e.g., to allow a
+            Producer of links to web pages to pass those links forward to the Consumer, so they can be parsed for
+            content and further links to be passed back to the Producer.
+        :type source: asyncio.Queue
+
+        :param transformer: Transformer instance containing the read, input, and output transformations to use when
+            reading from the source, processing raw elements, and writing back to the sink, respectively.
+
+        :param event_bus: EventBus intended to have been created by the parent Crawler. Used to emit messages
+            whenever an item has been successfully processed.
+        :type event_bus: EventBus
+        """
         self.id = id
         self.event_bus = event_bus
         self.source = source
@@ -24,6 +46,8 @@ class Producer:
         self.transformer = transformer
 
     async def run(self):
+        """Run the Producer — i.e, read from the `self.source`; process items; and feed back to `self.sink` until
+        terminated by parent Crawler."""
         while True:
             try:
                 # Read from Source
