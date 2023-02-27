@@ -55,8 +55,6 @@ if os.environ.get("READTHEDOCS") == "True":
                 "-o",
                 str(PROJECT_ROOT / "docs" / "reference"),
                 str(PACKAGE_ROOT),
-                str(PACKAGE_ROOT / "*.c"),
-                str(PACKAGE_ROOT / "*.so"),
             ]
         )
 

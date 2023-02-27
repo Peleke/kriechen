@@ -3,6 +3,4 @@ __pycache__
 .tox/
 *.egg-info
 .coverage
-docs/_build
-docs/reference
 TODO
