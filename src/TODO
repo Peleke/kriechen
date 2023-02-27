@@ -1,3 +1,0 @@
-- Add REGISTRY_FULL listener
-  - `__watch` should emit when registry is full
-  - EventBus should have listener that invokes `__drain` and `__terminate_workers` when REGISTRY_FULL is received
