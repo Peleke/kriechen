@@ -1,11 +1,20 @@
-- Crawl URLs
-- Parse Pages to Collect Text
-- Cross-Ref. Text against words of interest***
-- Save important sentences
+# Kriechen
+Kriechen exposes two classes:
+- [Crawler](./src/crawler.py), a generic task manager that orchestrates the execution of Consumers and Producers that feed back into each others' source queues
+- [Spider](./src/spider.py), a class that uses the `Crawler` to create Producers that generate a queue of links to process, and Consumers that download the HTML of these links
 
-Usage
-- Save vocabulary lists => Generate flash cards from real sentences w/ word
-- Select POS || Case => Generate cards to emphasize selection
-- Select Grammatical Topic => Generate cards to drill topic
-  - Can add vocab constraints
-- Standard SRS functionality
+## Spider
+### Usage
+The `Spider` class can be instantiated with just a URL.
+
+```python
+from kriechen import Spider
+
+spider = Spider(url="https://www.tagesschau.de", max_links=100)
+
+# Contains `Page` objects w/ Underlying HTML/"Soup"
+results = await spider.crawl()
+
+# Extracts Text from Soup
+result_text_only = spider.pages(extract_text=True)
+```
