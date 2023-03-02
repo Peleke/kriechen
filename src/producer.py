@@ -1,5 +1,6 @@
 """Producer is responsible for generating arbitrary streams of data and placing it onto a provided queue. Producer is
 designed to execute indefinitely until terminated by a parent Crawler."""
+from typing import Any, List
 import logging
 import asyncio
 
@@ -51,17 +52,17 @@ class Producer:
         while True:
             try:
                 # Read from Source
-                raw_element = await self.source.get()
-                logging.info(f"Got '{raw_element}' from source.")
+                raw_element: Any = await self.source.get()
+                logging.info(f"Producer #{self.id} got '{raw_element}' from source.")
                 # Process
-                logging.info("Processing...")
+                logging.info(f"Producer #{self.id} processing input...")
                 logging.error(self.transformer.fn)
-                result = self.transformer.fn(self.transformer.fn_raw(raw_element))
-                logging.info("Input processed.")
+                result = await self.transformer.fn(self.transformer.fn_raw(raw_element))
+                logging.info(f"Producer #{self.id} done processing input.")
                 # Put on Sink
-                logging.info("Placing processed input on sink...")
-                await self.sink.put(self.transformer.fn_sink(result))
-                logging.info("Placed processed input on sink.")
+                logging.info(f"Producer #{self.id} placing processed input on sink...")
+                await self.spread(results=self.transformer.fn_sink(result))
+                logging.info(f"Producer #{self.id} placed processed input on sink.")
                 # Complete Processing
                 self.source.task_done()
                 self.event_bus.emit(
@@ -70,3 +71,13 @@ class Producer:
                 )
             except asyncio.exceptions.CancelledError:
                 break
+
+    async def spread(self, results: List[Any]):
+        """...
+
+        :param ...:
+        :type ...:
+        """
+        for result in results:
+            logging.info(result)
+            await self.sink.put(result)

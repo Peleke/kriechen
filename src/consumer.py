@@ -1,5 +1,6 @@
 """The Consumer class is responsible for accepting and processing arbitrary streams of data from a provided queue.
 Consumer is designed to execute indefinitely until terminated by a parent Crawler."""
+from typing import Any, List
 import logging
 import asyncio
 
@@ -52,18 +53,18 @@ class Consumer:
         while True:
             try:
                 # Read from Source
-                raw_element = await self.source.get()
+                raw_element: Any = await self.source.get()
                 logging.info(f"Consumer #{self.id} got '{raw_element}' from source.")
 
                 if raw_element:
                     logging.info(f"Consumer #{self.id} processing raw input...")
-                    result = self.transformer.fn(self.transformer.fn_raw(raw_element))
+                    result = await self.transformer.fn(self.transformer.fn_raw(raw_element))
                     logging.info(f"Consumer #{self.id} processed raw input.")
 
                     # Put on Sink
                     if not draining:
                         logging.info(f"Consumer #{self.id} placing processed input on sink...")
-                        await self.sink.put(self.transformer.fn_sink(result))
+                        await self.spread(results=self.transformer.fn_sink(result))
                         logging.info(f"Consumer #{self.id} placed processed input on sink.")
                     else:
                         logging.info(f"Consumer #{self.id} is draining, not putting additional items on queue...")
@@ -71,7 +72,17 @@ class Consumer:
                 self.source.task_done()
                 self.event_bus.emit(
                     CrawlerEvents.Consumer.PROCESSED_ITEM,
-                    {"consumer_id": self.id, "raw_element": raw_element},
+                    {"consumer_id": self.id, "raw_element": result},
                 )
             except asyncio.exceptions.CancelledError:
                 break
+
+    async def spread(self, results: List[Any]):
+        """...
+
+        :param ...:
+        :type ...:
+        """
+        for result in results:
+            logging.info(result)
+            await self.sink.put(result)

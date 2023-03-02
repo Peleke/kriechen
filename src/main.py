@@ -9,8 +9,9 @@ from .crawler import Crawler
 from .transformer import Transformer
 
 
-async def main():
+async def main(base_url: str):
     crawler = Crawler(
+        base_url=base_url,
         consumer_transformer=Transformer(
             fn=lambda num: num,
             fn_sink=lambda num: (10, num),
@@ -26,9 +27,9 @@ async def main():
     for i in range(10):
         logging.info(f"Seeding source with {i}...")
         if i == 9:
-            crawler.seed_source((3, i))
+            crawler.seed_source("url")
         else:
-            crawler.seed_source((0, i))
+            crawler.seed_source("url")
 
     await crawler.crawl()
 
@@ -38,7 +39,7 @@ if __name__ == "__main__":
     if sys.version_info >= (3, 11):
         with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
             try:
-                runner.run(main())
+                runner.run(main(base_url="https://tagesschau.de"))
             except asyncio.exceptions.CancelledError:
                 pass
     else:

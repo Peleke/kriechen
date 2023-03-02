@@ -17,6 +17,7 @@ class Crawler:
     @classmethod
     def create(
         cls,
+        base_url: str,
         consumer_transformer: Transformer,
         producer_transformer: Transformer,
         terminate: Callable,
@@ -27,6 +28,7 @@ class Crawler:
         source_max: int = 10,
     ):
         self = cls(
+            base_url=base_url,
             consumer_count=consumer_count,
             consumer_transformer=consumer_transformer,
             producer_count=producer_count,
@@ -42,14 +44,19 @@ class Crawler:
 
     def __init__(
         self,
+        base_url: str,
         consumer_transformer: Transformer,
         producer_transformer: Transformer,
         consumer_count: int = 10,
         producer_count: int = 10,
+        max_links: int = 10,
         sink_max: int = 10,
         source_max: int = 10,
         terminate: Callable = (lambda *_: False),
     ):
+        self.base_url = base_url
+        self.max_links = max_links
+
         self.consumer_transformer = consumer_transformer
         self.consumer_count = consumer_count
         self.consumers: Dict[int, Dict[str, Any]] = dict()
@@ -63,7 +70,7 @@ class Crawler:
         self.terminate = terminate
 
         self.event_bus = EventBus()
-        self.registry = Registry(event_bus=self.event_bus)
+        self.registry = Registry(event_bus=self.event_bus, max=max_links)
         self.__shutting_down = False
 
         self.destructor = self.Destructor(
@@ -84,7 +91,7 @@ class Crawler:
     #############
     # THROWAWAY #
     #############
-    def seed_source(self, input_: Tuple[int, Any]):
+    def seed_source(self, input_: str):
         self.source.put_nowait(input_)
 
     ##########################
@@ -126,6 +133,9 @@ class Crawler:
         for agents, agent_type in [(producers, "producer"), (consumers, "consumer")]:
             for data in agents.values():
                 data["task"] = asyncio.create_task(data[agent_type].run())
+
+        # Seed
+        self.seed_source(input_=self.base_url)
 
         # Gather `producers` + Join Consumer Input Queue
         await asyncio.gather(*self.producer_tasks)
@@ -222,6 +232,8 @@ class Crawler:
             await asyncio.gather(*drain_tasks)
 
         async def watch(self, event: Any) -> None:
+            logging.info("Checking if done...")
+            logging.info(self.crawler.done)
             if self.terminate(self.crawler, event):
                 self.event_bus.emit(CrawlerEvents.Crawler.TERMINATE)
 
@@ -229,9 +241,16 @@ class Crawler:
             queue = getattr(self.crawler, queue_name)
             while True:
                 try:
-                    _ = await asyncio.wait_for(queue.get(), timeout=self.drain_timeout)
+                    _, pending = await asyncio.wait([asyncio.create_task(queue.get())], timeout=self.drain_timeout)
+                    if pending:
+                        for pending_task in pending:
+                            pending_task.cancel()
                     queue.task_done()
-                except TimeoutError:
+                except ValueError as e:
+                    logging.warning(
+                        msg="Got error while draining Queue",
+                        exc_info=e,
+                    )
                     break
 
         def terminate_workers(self, producers: bool = True, consumers: bool = True):

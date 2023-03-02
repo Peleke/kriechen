@@ -2,6 +2,7 @@
 and read their content."""
 from typing import List
 import asyncio
+import logging
 
 import aiohttp
 
@@ -11,7 +12,6 @@ from .transformer import Transformer
 
 
 class Spider:
-
     @classmethod
     async def create(cls, url: str, session: aiohttp.ClientSession, max_links: int = 100) -> "Spider":
         return cls(
@@ -19,15 +19,17 @@ class Spider:
             session=session,
             max_links=max_links,
             crawler=Crawler(
+                base_url=url,
                 consumer_transformer=Transformer(
-                    fn=(lambda url: Spider.__create_page(url=url, session=session)),
+                    fn=lambda url: asyncio.create_task(Spider.__create_page(url=url, session=session)),
                     fn_sink=(lambda page: [page.url]),
                 ),
                 producer_transformer=Transformer(
-                    fn=(lambda url: Spider.__create_page(url=url, session=session)),
+                    fn=lambda url: asyncio.create_task(Spider.__create_page(url=url, session=session)),
                     fn_sink=(lambda page: page.internal_links),
                 ),
                 terminate=(lambda self, _: self.done),
+                max_links=max_links,
             ),
         )
 
@@ -63,10 +65,11 @@ class Spider:
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        spider = await Spider.create(url="https://www.tagesschau.de", session=session)
-        await spider.crawl()
-        print(spider.pages)
+        spider = await Spider.create(url="https://www.tagesschau.de", session=session, max_links=10)
+        res = await spider.crawl()
+        print(res)
 
 
 if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.INFO)
     asyncio.run(main())
