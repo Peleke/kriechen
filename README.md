@@ -16,5 +16,5 @@ spider = Spider(url="https://www.tagesschau.de", max_links=100)
 results = await spider.crawl()
 
 # Extracts Text from Soup
-result_text_only = spider.pages(extract_text=True)
+result_text_only = spider.results(extract_text=True)
 ```

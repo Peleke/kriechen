@@ -51,24 +51,28 @@ class Spider:
         await self.__crawler.crawl()
         return self.__crawler.registry
 
-    def add_page(self, page: Page) -> Page:
-        """Add a page to the list of processed pages.
+    def results(self, extract_text: bool = False) -> List[str]:
+        """Retrieve either raw results of crawling, or extract the text.
 
-        :param page: A Page to append to the list.
-        :type page: Page
+        :param extract_text: Whether or not to extract text from results. Only valid if spider was used to fetch URLs.
+        :type extract_text: bool
 
-        :return: Returns the appended page.
-        :rtype: Page
+        :return: Return a list of results.
+        :rtype: List[str]
         """
-        self.pages.append(page)
-        return self.pages[-1]
+        contents = self.__crawler.registry.contents
+        if not extract_text:
+            return contents
+        else:
+            return [el["raw_element"].soup.get_text().replace("\n", " ") for el in contents]
 
 
 async def main():
     async with aiohttp.ClientSession() as session:
         spider = await Spider.create(url="https://www.tagesschau.de", session=session, max_links=19)
-        res = await spider.crawl()
-        print(res.contents[0]["raw_element"].soup.get_text().replace("\n", " "))
+        await spider.crawl()
+        results = spider.results(extract_text=True)
+        print(results)
 
 
 if __name__ == "__main__":
