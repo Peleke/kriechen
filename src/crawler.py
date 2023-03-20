@@ -129,16 +129,16 @@ class Crawler:
         producers = await self.generate_producers()
         consumers = await self.generate_consumers()
 
-        # Create/Schedule tasks
-        for agents, agent_type in [(producers, "producer"), (consumers, "consumer")]:
-            for data in agents.values():
-                data["task"] = asyncio.create_task(data[agent_type].run())
-
-        # Seed
+        # Seed Queue
         self.seed_source(input_=self.base_url)
 
+        # Create/Schedule tasks
+        async with asyncio.TaskGroup() as tg:
+            for agents, agent_type in [(producers, "producer"), (consumers, "consumer")]:
+                for data in agents.values():
+                    data["task"] = tg.create_task(data[agent_type].run())
+
         # Gather `producers` + Join Consumer Input Queue
-        await asyncio.gather(*self.producer_tasks)
         await self.sink.join()
 
         # Cancel Hanging Consumers
@@ -248,7 +248,7 @@ class Crawler:
                     if getattr(self.crawler, queue_name)._unfinished_tasks > 0:
                         queue.task_done()
                 except ValueError as e:
-                    logging.warning(
+                    logging.error(
                         msg="Got error while draining Queue",
                         exc_info=e,
                     )

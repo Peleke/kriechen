@@ -57,7 +57,6 @@ class Producer:
                 logging.info(f"Producer #{self.id} got '{raw_element}' from source.")
                 # Process
                 logging.info(f"Producer #{self.id} processing input...")
-                logging.error(self.transformer.fn)
                 result = await self.transformer.fn(self.transformer.fn_raw(raw_element))
                 logging.info(f"Producer #{self.id} done processing input.")
                 # Put on Sink

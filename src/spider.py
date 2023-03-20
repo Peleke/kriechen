@@ -66,12 +66,11 @@ class Spider:
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        spider = await Spider.create(url="https://www.tagesschau.de", session=session, max_links=10)
+        spider = await Spider.create(url="https://www.tagesschau.de", session=session, max_links=19)
         res = await spider.crawl()
-        print(res)
         print(res.contents[0]["raw_element"].soup.get_text().replace("\n", " "))
 
 
 if __name__ == "__main__":
-    logging.getLogger().setLevel(logging.INFO)
+    logging.getLogger().setLevel(logging.WARNING)
     asyncio.run(main())
