@@ -245,7 +245,8 @@ class Crawler:
                     if pending:
                         for pending_task in pending:
                             pending_task.cancel()
-                    queue.task_done()
+                    if getattr(self.crawler, queue_name)._unfinished_tasks > 0:
+                        queue.task_done()
                 except ValueError as e:
                     logging.warning(
                         msg="Got error while draining Queue",

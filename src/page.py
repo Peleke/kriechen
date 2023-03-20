@@ -29,9 +29,13 @@ class Page:
     @property
     def internal_links(self) -> List[str]:
         base_url = self.url.split("/")[2]
-        if self.soup is None:
+        try:
+            if self.soup is None:
+                return []
+            else:
+                return [a["href"] for a in self.soup.find_all("a") if base_url in a["href"]]
+        except KeyError:
             return []
-        return [a["href"] for a in self.soup.find_all("a") if base_url in a["href"]]
 
     async def fetch(self) -> Optional[aiohttp.client_reqrep.ClientResponse]:
         async with self.session.get(self.url) as response:

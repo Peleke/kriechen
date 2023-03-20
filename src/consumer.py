@@ -78,10 +78,13 @@ class Consumer:
                 break
 
     async def spread(self, results: List[Any]):
-        """...
+        """Place each element in the list of `results` onto the input queue for currently running Producers.
 
-        :param ...:
-        :type ...:
+        :param results: A list of elements collected from the previously processed element.
+        :type results: List[str]
+
+        :return: Void.
+        :rtype: None
         """
         for result in results:
             logging.info(result)

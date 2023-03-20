@@ -8,6 +8,7 @@ import aiohttp
 
 from .crawler import Crawler
 from .page import Page
+from .registry import Registry
 from .transformer import Transformer
 
 
@@ -45,10 +46,10 @@ class Spider:
         self.__session = session
         self.__crawler = crawler
 
-    async def crawl(self) -> List[Page]:
+    async def crawl(self) -> Registry:
         """..."""
         await self.__crawler.crawl()
-        return self.pages
+        return self.__crawler.registry
 
     def add_page(self, page: Page) -> Page:
         """Add a page to the list of processed pages.
@@ -68,6 +69,7 @@ async def main():
         spider = await Spider.create(url="https://www.tagesschau.de", session=session, max_links=10)
         res = await spider.crawl()
         print(res)
+        print(res.contents[0]["raw_element"].soup.get_text().replace("\n", " "))
 
 
 if __name__ == "__main__":

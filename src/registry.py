@@ -78,3 +78,8 @@ class Registry:
     def tail(self):
         """Returns the last element of the underlying registry container."""
         return self.__registry[-1]
+
+    @property
+    def contents(self):
+        """Return contents of the registry, i.e., the underlying list itself."""
+        return self.__registry

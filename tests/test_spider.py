@@ -12,4 +12,4 @@ class TestSpider:
 
             results = await spider.crawl()
 
-            assert len(results) == 100
+            assert len(results.contents) == 100

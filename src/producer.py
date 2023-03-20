@@ -1,6 +1,6 @@
 """Producer is responsible for generating arbitrary streams of data and placing it onto a provided queue. Producer is
 designed to execute indefinitely until terminated by a parent Crawler."""
-from typing import Any, List
+from typing import Any, List, Set
 import logging
 import asyncio
 
@@ -45,6 +45,7 @@ class Producer:
         self.source = source
         self.sink = sink
         self.transformer = transformer
+        self.__seen: Set[Any] = set()
 
     async def run(self):
         """Run the Producer — i.e, read from the `self.source`; process items; and feed back to `self.sink` until
@@ -72,12 +73,17 @@ class Producer:
             except asyncio.exceptions.CancelledError:
                 break
 
-    async def spread(self, results: List[Any]):
-        """...
+    async def spread(self, results: List[Any]) -> None:
+        """Place each link in the list of `results` onto the input queue for currently running Consumers.
 
-        :param ...:
-        :type ...:
+        :param results: A list of elements collected from the previously processed element.
+        :type results: List[str]
+
+        :return: Void.
+        :rtype: None
         """
         for result in results:
             logging.info(result)
-            await self.sink.put(result)
+            if result not in self.__seen:
+                self.__seen.add(result)
+                await self.sink.put(result)

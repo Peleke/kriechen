@@ -26,10 +26,7 @@ async def main(base_url: str):
 
     for i in range(10):
         logging.info(f"Seeding source with {i}...")
-        if i == 9:
-            crawler.seed_source("url")
-        else:
-            crawler.seed_source("url")
+        crawler.seed_source(base_url)
 
     await crawler.crawl()
 
