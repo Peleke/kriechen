@@ -344,7 +344,7 @@ class Crawler:
             await asyncio.gather(*drain_tasks)
 
         async def watch(self, event: Any) -> None:
-            """A method invoked on eveery `CrawlerEvents.Registry.UPDATED` event, and used to determine if the crawler
+            """A method invoked on every `CrawlerEvents.Registry.UPDATED` event, and used to determine if the crawler
             is done. If so, it emits `CrawlerEvents.Crawler.TERMINATE` to trigger a shutdown on the parent Crawler.
 
             :param event: The event triggering invocation of `watch`.
@@ -377,7 +377,15 @@ class Crawler:
                     )
                     break
 
-        def terminate_workers(self, producers: bool = True, consumers: bool = True):
+        def terminate_workers(self, producers: bool = True, consumers: bool = True) -> None:
+            """Cancel all running Producers and/or Consumers.
+
+            :param producers: Whether or not to cancel Producers.
+            :type producers: bool
+
+            :param consumers: Whether or not to cancel Consumers.
+            :type consumers: bool
+            """
             if self.crawler.shutting_down:
                 return
             else:
