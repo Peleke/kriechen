@@ -27,6 +27,6 @@ class Listeners:
             self.event_bus.add_listener(event_name, callback)
 
     @property
-    def event_names(self):
+    def event_names(self) -> List[str]:
         """Returns a list of event names against which listeners are registered."""
         return list(self.listeners.keys())
